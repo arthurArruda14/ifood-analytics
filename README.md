@@ -96,4 +96,4 @@ Para rodar os testes: `pytest`.
 
 ## Autor
 
-**Seu Nome** · ADS na Fatec Taquaritinga · [LinkedIn](https://linkedin.com/in/seu-perfil)
+**Arthur Marangoni de Arruda** · ADS na Fatec Taquaritinga · [LinkedIn](https://www.linkedin.com/in/arthur-arruda-b0abb21a5/)
