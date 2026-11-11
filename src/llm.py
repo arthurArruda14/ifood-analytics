@@ -1,6 +1,7 @@
 """Chamadas ao LLM (Claude): gerar código pandas e explicar o resultado."""
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -8,12 +9,41 @@ from anthropic import Anthropic
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# Modelos preferidos, em ordem. O catálogo do Groq muda com frequência, então o app
+# consulta a lista da sua conta e usa o primeiro disponível. Para forçar um modelo,
+# defina GROQ_MODEL no .env ou nos Secrets.
+GROQ_PREFERRED_MODELS = [
+    "llama-3.3-70b-versatile",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3-32b",
+    "llama-3.1-8b-instant",
+]
+_NOT_CHAT_MODELS = ("whisper", "guard", "tts", "orpheus", "playai", "compound", "embed")
 DEFAULT_PROVIDER = "groq"
 
 
 def _load_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=8)
+def pick_groq_model(api_key: str) -> str:
+    """Escolhe um modelo de chat disponível na conta Groq da pessoa."""
+    forced = os.getenv("GROQ_MODEL")
+    if forced:
+        return forced
+    from groq import Groq
+
+    ids = [m.id for m in Groq(api_key=api_key).models.list().data]
+    chat_models = [i for i in ids if not any(bad in i.lower() for bad in _NOT_CHAT_MODELS)]
+    for preferred in GROQ_PREFERRED_MODELS:
+        if preferred in chat_models:
+            return preferred
+    if chat_models:
+        return chat_models[0]
+    raise ValueError("Nenhum modelo de chat disponível na sua conta Groq.")
 
 
 def _chat(system: str, user: str, max_tokens: int, provider: str, api_key: str | None) -> str:
@@ -25,8 +55,8 @@ def _chat(system: str, user: str, max_tokens: int, provider: str, api_key: str |
         if not key:
             raise ValueError("Defina a GROQ_API_KEY no .env ou na barra lateral.")
         response = Groq(api_key=key).chat.completions.create(
-            model=GROQ_MODEL,
-            max_tokens=max_tokens,
+            model=pick_groq_model(key),
+            max_tokens=max_tokens * 2,  # modelos com raciocínio gastam tokens "pensando"
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -67,6 +97,7 @@ def describe_dataframe(df: pd.DataFrame, max_categories: int = 8) -> str:
 
 def extract_code(text: str) -> str:
     """Extrai o código de dentro de um bloco ```python ... ```."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     match = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.DOTALL)
     return (match.group(1) if match else text).strip()
 
@@ -98,4 +129,5 @@ def explain_result(
 ) -> str:
     """Pede ao LLM uma explicação curta do resultado, em linguagem de negócio."""
     user = f"Pergunta: {question}\n\nResultado:\n{result_text}"
-    return _chat(_load_prompt("explain_prompt.md"), user, 500, provider, api_key).strip()
+    text = _chat(_load_prompt("explain_prompt.md"), user, 500, provider, api_key)
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
