@@ -14,6 +14,8 @@ st.set_page_config(page_title="Delivery Analytics AI", page_icon="🍔", layout=
 st.title("🍔 Delivery Analytics AI")
 st.caption("Pergunte em português sobre os dados de pedidos e receba números, gráficos e insights.")
 
+PROVIDERS = {"Groq (gratuito)": "groq", "Anthropic (Claude)": "anthropic"}
+
 EXAMPLES = [
     "Qual horário do dia tem a maior taxa de atraso?",
     "Como a chuva afeta o tempo de entrega?",
@@ -24,12 +26,19 @@ EXAMPLES = [
 
 with st.sidebar:
     st.header("Configuração")
+    provider_label = st.selectbox("Provedor de IA", list(PROVIDERS), index=0)
+    provider = PROVIDERS[provider_label]
+    env_var = "GROQ_API_KEY" if provider == "groq" else "ANTHROPIC_API_KEY"
     api_key = st.text_input(
-        "Chave da API Anthropic",
+        "Chave da API",
         type="password",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
+        value=os.getenv(env_var, ""),
         help="Fica apenas na sua sessão. Também pode ser definida no arquivo .env.",
     )
+    if provider == "groq":
+        st.caption("Chave gratuita, sem cartão: [console.groq.com](https://console.groq.com/keys)")
+    else:
+        st.caption("Chave paga: [console.anthropic.com](https://console.anthropic.com/)")
     source = st.radio("Fonte dos dados", ["Dataset de exemplo", "Enviar meu CSV"])
     uploaded = st.file_uploader("CSV", type="csv") if source == "Enviar meu CSV" else None
 
@@ -74,7 +83,7 @@ if question:
         st.stop()
     with st.spinner("Analisando os dados..."):
         try:
-            st.session_state.history.append(answer_question(question, df, api_key))
+            st.session_state.history.append(answer_question(question, df, api_key, provider))
         except Exception as exc:  # erros de rede, chave inválida etc.
             st.error(f"Falha ao consultar o modelo: {exc}")
 

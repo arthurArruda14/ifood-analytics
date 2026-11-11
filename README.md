@@ -42,21 +42,26 @@ Com 5.000 pedidos sintéticos (semente fixa), perguntas como estas retornam:
 
 ## Stack
 
-Python · Streamlit · pandas · Plotly · API da Anthropic (Claude) · pytest
+Python · Streamlit · pandas · Plotly · Groq (Llama 3.3, gratuito) ou Anthropic (Claude) · pytest
 
 ## Como rodar
 
 ```bash
-git clone https://github.com/arthur_arruda/ifood-analytics-ai.git
+git clone https://github.com/SEU-USUARIO/ifood-analytics-ai.git
 cd ifood-analytics-ai
 
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env             # coloque sua ANTHROPIC_API_KEY no .env
+cp .env.example .env             # coloque sua GROQ_API_KEY (gratuita) no .env
 streamlit run app.py
 ```
+
+O app funciona com dois provedores, escolhidos na barra lateral:
+
+- **Groq (padrão, gratuito):** chave sem cartão em [console.groq.com/keys](https://console.groq.com/keys).
+- **Anthropic (Claude):** chave paga em [console.anthropic.com](https://console.anthropic.com/).
 
 Para gerar o CSV de exemplo manualmente: `python -m src.data`.
 Para rodar os testes: `pytest`.
@@ -91,4 +96,4 @@ Para rodar os testes: `pytest`.
 
 ## Autor
 
-**Arthur Marangoni de Arruda** · ADS na Fatec Taquaritinga · [LinkedIn](https://www.linkedin.com/in/arthur-arruda-b0abb21a5/)
+**Seu Nome** · ADS na Fatec Taquaritinga · [LinkedIn](https://linkedin.com/in/seu-perfil)

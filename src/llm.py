@@ -7,18 +7,46 @@ import pandas as pd
 from anthropic import Anthropic
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
-MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+DEFAULT_PROVIDER = "groq"
 
 
 def _load_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text(encoding="utf-8")
 
 
-def _client(api_key: str | None = None) -> Anthropic:
-    key = api_key or os.getenv("ANTHROPIC_API_KEY")
-    if not key:
-        raise ValueError("Defina a ANTHROPIC_API_KEY no .env ou na barra lateral.")
-    return Anthropic(api_key=key)
+def _chat(system: str, user: str, max_tokens: int, provider: str, api_key: str | None) -> str:
+    """Envia uma mensagem ao provedor escolhido e devolve o texto da resposta."""
+    if provider == "groq":
+        from groq import Groq
+
+        key = api_key or os.getenv("GROQ_API_KEY")
+        if not key:
+            raise ValueError("Defina a GROQ_API_KEY no .env ou na barra lateral.")
+        response = Groq(api_key=key).chat.completions.create(
+            model=GROQ_MODEL,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content
+
+    if provider == "anthropic":
+        key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        if not key:
+            raise ValueError("Defina a ANTHROPIC_API_KEY no .env ou na barra lateral.")
+        response = Anthropic(api_key=key).messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return response.content[0].text
+
+    raise ValueError(f"Provedor desconhecido: {provider}")
 
 
 def describe_dataframe(df: pd.DataFrame, max_categories: int = 8) -> str:
@@ -49,6 +77,7 @@ def generate_code(
     api_key: str | None = None,
     previous_error: str | None = None,
     previous_code: str | None = None,
+    provider: str = DEFAULT_PROVIDER,
 ) -> str:
     """Pede ao LLM o código pandas que responde a pergunta."""
     content = f"Esquema do DataFrame `df`:\n{describe_dataframe(df)}\n\nPergunta: {question}"
@@ -57,23 +86,16 @@ def generate_code(
             f"\n\nSua tentativa anterior falhou.\nCódigo:\n```python\n{previous_code}\n```\n"
             f"Erro: {previous_error}\nCorrija e responda novamente."
         )
-    response = _client(api_key).messages.create(
-        model=MODEL,
-        max_tokens=1000,
-        system=_load_prompt("system_prompt.md"),
-        messages=[{"role": "user", "content": content}],
-    )
-    return extract_code(response.content[0].text)
+    text = _chat(_load_prompt("system_prompt.md"), content, 1000, provider, api_key)
+    return extract_code(text)
 
 
-def explain_result(question: str, result_text: str, api_key: str | None = None) -> str:
+def explain_result(
+    question: str,
+    result_text: str,
+    api_key: str | None = None,
+    provider: str = DEFAULT_PROVIDER,
+) -> str:
     """Pede ao LLM uma explicação curta do resultado, em linguagem de negócio."""
-    response = _client(api_key).messages.create(
-        model=MODEL,
-        max_tokens=500,
-        system=_load_prompt("explain_prompt.md"),
-        messages=[
-            {"role": "user", "content": f"Pergunta: {question}\n\nResultado:\n{result_text}"}
-        ],
-    )
-    return response.content[0].text.strip()
+    user = f"Pergunta: {question}\n\nResultado:\n{result_text}"
+    return _chat(_load_prompt("explain_prompt.md"), user, 500, provider, api_key).strip()

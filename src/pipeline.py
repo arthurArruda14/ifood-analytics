@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.llm import explain_result, generate_code
+from src.llm import DEFAULT_PROVIDER, explain_result, generate_code
 from src.safe_exec import UnsafeCodeError, run_code
 
 MAX_ATTEMPTS = 2
@@ -30,7 +30,12 @@ def result_to_text(result: Any, max_rows: int = 20) -> str:
     return str(result)
 
 
-def answer_question(question: str, df: pd.DataFrame, api_key: str | None = None) -> Answer:
+def answer_question(
+    question: str,
+    df: pd.DataFrame,
+    api_key: str | None = None,
+    provider: str = DEFAULT_PROVIDER,
+) -> Answer:
     """Responde uma pergunta sobre o DataFrame. Se o código falhar, tenta corrigir 1 vez."""
     answer = Answer(question=question)
     error = None
@@ -38,7 +43,9 @@ def answer_question(question: str, df: pd.DataFrame, api_key: str | None = None)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         answer.attempts = attempt
-        code = generate_code(question, df, api_key, previous_error=error, previous_code=code)
+        code = generate_code(
+            question, df, api_key, previous_error=error, previous_code=code, provider=provider
+        )
         answer.code = code
         try:
             executed = run_code(code, df)
@@ -46,7 +53,9 @@ def answer_question(question: str, df: pd.DataFrame, api_key: str | None = None)
             error = str(exc)
             continue
         answer.result, answer.fig, answer.error = executed.result, executed.fig, ""
-        answer.explanation = explain_result(question, result_to_text(executed.result), api_key)
+        answer.explanation = explain_result(
+            question, result_to_text(executed.result), api_key, provider
+        )
         return answer
 
     answer.error = error or "Não foi possível gerar uma análise válida."
